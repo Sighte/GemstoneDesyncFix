@@ -1,24 +1,28 @@
 package com.gdfix.client;
 
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 /**
- * A deliberately small screen: two toggle buttons (one per fix) and a Done button.
+ * A deliberately small screen: a title, two toggle buttons (one per fix), and a Done button.
  * Opened by {@code /gdfix}. Changes are saved immediately on each toggle.
+ *
+ * <p>Built entirely from widgets ({@link StringWidget} + {@link Button}) added via
+ * {@code addRenderableWidget}, matching Minecraft 26.1's widget-based screen rendering.
  */
 public final class GdFixScreen extends Screen {
 
     private static final int BUTTON_WIDTH = 220;
     private static final int BUTTON_HEIGHT = 20;
+    private static final int SPACING = 24;
 
     private final Screen parent;
 
     public GdFixScreen(Screen parent) {
-        super(Text.literal("Gemstone Desync Fix"));
+        super(Component.literal("Gemstone Desync Fix"));
         this.parent = parent;
     }
 
@@ -26,47 +30,45 @@ public final class GdFixScreen extends Screen {
     protected void init() {
         GdFixConfig cfg = GdFixClient.config();
         int left = this.width / 2 - BUTTON_WIDTH / 2;
-        int top = this.height / 2 - 32;
+        int top = this.height / 2 - 40;
 
-        addDrawableChild(ButtonWidget.builder(breakResetLabel(cfg), button -> {
+        addRenderableWidget(new StringWidget(
+                left, top - SPACING, BUTTON_WIDTH, BUTTON_HEIGHT, this.title, this.font));
+
+        Button breakResetButton = Button.builder(breakResetLabel(cfg), button -> {
             cfg.breakResetFix = !cfg.breakResetFix;
             cfg.save();
             button.setMessage(breakResetLabel(cfg));
-        }).dimensions(left, top, BUTTON_WIDTH, BUTTON_HEIGHT).build());
+        }).bounds(left, top, BUTTON_WIDTH, BUTTON_HEIGHT).build();
+        addRenderableWidget(breakResetButton);
 
-        addDrawableChild(ButtonWidget.builder(gemstoneLabel(cfg), button -> {
+        Button gemstoneButton = Button.builder(gemstoneLabel(cfg), button -> {
             cfg.gemstoneDesyncFix = !cfg.gemstoneDesyncFix;
             cfg.save();
             button.setMessage(gemstoneLabel(cfg));
-        }).dimensions(left, top + 24, BUTTON_WIDTH, BUTTON_HEIGHT).build());
+        }).bounds(left, top + SPACING, BUTTON_WIDTH, BUTTON_HEIGHT).build();
+        addRenderableWidget(gemstoneButton);
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Done"), button -> close())
-                .dimensions(left, top + 56, BUTTON_WIDTH, BUTTON_HEIGHT).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
+                .bounds(left, top + SPACING * 3, BUTTON_WIDTH, BUTTON_HEIGHT).build());
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title,
-                this.width / 2, this.height / 2 - 58, 0xFFFFFF);
+    public void onClose() {
+        this.minecraft.setScreen(parent);
     }
 
-    @Override
-    public void close() {
-        this.client.setScreen(parent);
+    private static Component breakResetLabel(GdFixConfig cfg) {
+        return Component.literal("Break Reset Fix: ").append(onOff(cfg.breakResetFix));
     }
 
-    private static Text breakResetLabel(GdFixConfig cfg) {
-        return Text.literal("Break Reset Fix: ").append(onOff(cfg.breakResetFix));
+    private static Component gemstoneLabel(GdFixConfig cfg) {
+        return Component.literal("Gemstone Desync Fix: ").append(onOff(cfg.gemstoneDesyncFix));
     }
 
-    private static Text gemstoneLabel(GdFixConfig cfg) {
-        return Text.literal("Gemstone Desync Fix: ").append(onOff(cfg.gemstoneDesyncFix));
-    }
-
-    private static Text onOff(boolean value) {
+    private static Component onOff(boolean value) {
         return value
-                ? Text.literal("ON").formatted(Formatting.GREEN)
-                : Text.literal("OFF").formatted(Formatting.RED);
+                ? Component.literal("ON").withStyle(ChatFormatting.GREEN)
+                : Component.literal("OFF").withStyle(ChatFormatting.RED);
     }
 }

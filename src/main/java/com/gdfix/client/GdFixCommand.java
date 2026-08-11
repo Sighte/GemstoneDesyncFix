@@ -1,14 +1,14 @@
 package com.gdfix.client;
 
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 
 /**
- * Registers the {@code /gdfix} client command. With no arguments it opens the
- * small toggle GUI; {@code /gdfix breakreset} and {@code /gdfix gemstonedesync}
- * flip a toggle without opening the screen.
+ * Registers the {@code /gdfix} client command. With no arguments it opens the small toggle
+ * GUI; {@code /gdfix breakreset} and {@code /gdfix gemstonedesync} flip a toggle without
+ * opening the screen.
  */
 public final class GdFixCommand {
 
@@ -37,7 +37,7 @@ public final class GdFixCommand {
     }
 
     private static void openScreen() {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         // Defer to the end of the tick so the command's own chat screen is closed first.
         mc.execute(() -> mc.setScreen(new GdFixScreen(null)));
     }

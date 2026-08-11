@@ -1,7 +1,7 @@
 # Gemstone Desync Fix
 
-A small, **standalone Fabric mod for Minecraft 1.21.5** that provides two client-side
-gemstone-mining fixes and nothing else. Version **26.1.2**.
+A small, **standalone Fabric mod for Minecraft 26.1.2** that provides two client-side
+gemstone-mining fixes and nothing else. Mod version **1.0.0**.
 
 > Clean-room reimplementation from the underlying client/server block mechanics.
 > Contains no third-party mod code.
@@ -10,8 +10,8 @@ gemstone-mining fixes and nothing else. Version **26.1.2**.
 
 | Toggle | What it does |
 | --- | --- |
-| **Break Reset Fix** | After you break a block, vanilla forces a 5-tick `blockBreakingCooldown` before the next block can be mined. This rewrites that cooldown to `0` so mining continues immediately with no stall. |
-| **Gemstone Desync Fix** | When you break a gemstone (rendered as stained glass / panes) but the server reverts it back into place — a "ghost block" — the mod detects the block reappearing and re-drives the break through the vanilla interaction manager (which keeps Minecraft's packet-sequence numbers correct, so it resolves the desync instead of causing a new one). |
+| **Break Reset Fix** | After you break a block, vanilla forces a 5-tick `destroyDelay` before the next block can be mined. This rewrites that cooldown to `0` so mining continues immediately with no stall. |
+| **Gemstone Desync Fix** | When you break a gemstone (rendered as stained glass / panes) but the server reverts it back into place — a "ghost block" — the mod detects the block reappearing and re-drives the break through the vanilla game mode (which keeps Minecraft's packet-sequence numbers correct, so it resolves the desync instead of causing a new one). |
 
 Both default to **on** and can be toggled independently.
 
@@ -54,17 +54,19 @@ Config tuning values are read at startup; restart the client after editing the J
 
 ## Requirements
 
-- Minecraft **1.21.5**
-- Fabric Loader **>= 0.16.10**
+- Minecraft **26.1.2** (the modern unobfuscated line — Java **25**)
+- Fabric Loader **>= 0.19.3**
 - Fabric API
 
 ## Building
+
+Minecraft 26.1 requires a **Java 25** JDK. Point Gradle at one, then:
 
 ```bash
 ./gradlew build
 ```
 
-Output: `build/libs/gemstone-desync-fix-26.1.2.jar` (drop into your `mods/` folder).
+Output: `build/libs/gemstone-desync-fix-1.0.0.jar` (drop into your `mods/` folder).
 
 Run unit tests only:
 
@@ -72,12 +74,22 @@ Run unit tests only:
 ./gradlew test
 ```
 
+### Toolchain notes (Minecraft 26.1)
+
+Minecraft 26.1 ships **unobfuscated** (real Mojang names, with parameters), so:
+
+- there is **no `mappings` dependency** and the build uses the new non-remapping
+  `net.fabricmc.fabric-loom` plugin (not `fabric-loom-remap`);
+- all Minecraft references use official Mojang names (e.g. `MultiPlayerGameMode.destroyBlock`,
+  `destroyDelay`), and the mixin needs no refmap;
+- the stack is **Gradle 9.5.1 + Loom 1.17 + Fabric Loader 0.19.3 + Java 25**.
+
 ## Verification status
 
-- ✅ Compiles against Minecraft 1.21.5 / Fabric.
+- ✅ Compiles against Minecraft 26.1.2 / Fabric (Java 25).
 - ✅ 12 unit tests pass for the pure logic (`DesyncTracker`, `GemstoneBlocks`).
-- ✅ Mixin targets resolve to the correct obfuscated members (verified via the generated refmap).
+- ✅ Mixin targets verified against the decompiled 26.1.2 source
+  (`destroyBlock`, `continueDestroyBlock`, `destroyDelay`).
 - ⚠️ In-game behaviour on Hypixel SkyBlock has **not** been tested from the build environment
   (it requires connecting to the live server). The `ghostThresholdTicks` / `giveUpTicks`
   values may want tuning against real server latency.
-```
