@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"id": "gdfix",
+	"version": "${version}",
+	"name": "Gemstone Desync Fix",
+	"description": "Standalone client-side fixes for gemstone mining: break reset fix and gemstone desync fix. Toggle both from a small GUI opened with /gdfix.",
+	"authors": [
+		"gdfix"
+	],
+	"contact": {},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.gdfix.client.GdFixClient"
+		]
+	},
+	"mixins": [
+		"gdfix.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.16.10",
+		"minecraft": "~1.21.5",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
