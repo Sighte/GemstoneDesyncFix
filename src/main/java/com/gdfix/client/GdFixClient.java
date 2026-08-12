@@ -1,15 +1,17 @@
 package com.gdfix.client;
 
-import com.gdfix.logic.DesyncTracker;
-import com.gdfix.logic.GemstoneBlocks;
+import com.gdfix.logic.HotbarSlots;
+import com.gdfix.mixin.ItemInHandRendererAccessor;
+import com.gdfix.mixin.MultiPlayerGameModeAccessor;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.StainedGlassBlock;
+import net.minecraft.world.level.block.StainedGlassPaneBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,12 +19,15 @@ import org.slf4j.LoggerFactory;
  * Entry point and runtime coordinator for the two fixes (Minecraft 26.1, Mojang names).
  *
  * <ul>
- *   <li><b>Break reset fix</b> is applied inside {@code MultiPlayerGameModeMixin}, which
- *       calls {@link #config()}.</li>
- *   <li><b>Gemstone desync fix</b> is driven here: the mixin reports gemstone break attempts
- *       via {@link #onBreakBlockAttempt(BlockPos)}, and a client tick handler watches for the
- *       block being reverted by the server (a ghost) and re-drives the break through the
- *       vanilla game mode (which keeps Minecraft's packet-sequence numbers correct).</li>
+ *   <li><b>Break Reset Fix</b> — {@link #onContainerSetSlot(int, int, ItemStack)} is called
+ *       from {@code ClientPacketListenerMixin} after a server slot update. If the update
+ *       targets the held hotbar slot, the new stack is written into
+ *       {@code MultiPlayerGameMode.destroyingItem} and {@code ItemInHandRenderer.mainHandItem}
+ *       so mining does not treat it as an item change and reset.</li>
+ *   <li><b>Gemstone Desync Fix</b> — {@link #onServerVerifiedBlockUpdate(Level, BlockPos, BlockState)}
+ *       is called from {@code ClientLevelMixin} before a server block change is applied. When a
+ *       stained-glass block becomes air, the neighbouring panes are told to re-sync their
+ *       connection shapes so their hitboxes no longer block the next gemstone.</li>
  * </ul>
  */
 public final class GdFixClient implements ClientModInitializer {
@@ -30,15 +35,10 @@ public final class GdFixClient implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("gdfix");
 
     private static GdFixConfig config;
-    private static DesyncTracker tracker;
-    private static BlockPos trackedPos;
-    private static int tickCounter;
 
     @Override
     public void onInitializeClient() {
         config = GdFixConfig.load();
-        rebuildTracker();
-        ClientTickEvents.END_CLIENT_TICK.register(GdFixClient::onEndTick);
         GdFixCommand.register();
         LOGGER.info("[gdfix] Gemstone Desync Fix loaded (breakResetFix={}, gemstoneDesyncFix={})",
                 config.breakResetFix, config.gemstoneDesyncFix);
@@ -48,80 +48,43 @@ public final class GdFixClient implements ClientModInitializer {
         return config;
     }
 
-    /** Rebuild the tracker after the tuning values change in the config. */
-    public static void rebuildTracker() {
-        tracker = new DesyncTracker(config.ghostThresholdTicks, config.giveUpTicks);
-        trackedPos = null;
-    }
-
-    /**
-     * Called from the mixin at the start of {@code destroyBlock}. If the block being broken
-     * is a gemstone and the desync fix is enabled, start watching that position.
-     */
-    public static void onBreakBlockAttempt(BlockPos pos) {
-        if (config == null || !config.gemstoneDesyncFix || pos == null) {
+    /** Break Reset Fix — keep the mining/render item caches in sync with server slot updates. */
+    public static void onContainerSetSlot(int containerId, int slot, ItemStack stack) {
+        if (config == null || !config.breakResetFix) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) {
+        if (mc.player == null || mc.gameMode == null) {
             return;
         }
-        if (isGemstone(mc, pos)) {
-            trackedPos = pos.immutable();
-            tracker.onGemstoneBroken(key(pos), tickCounter);
+        if (!HotbarSlots.isHeldHotbarSlot(containerId, slot, mc.player.getInventory().getSelectedSlot())) {
+            return;
+        }
+        ((MultiPlayerGameModeAccessor) mc.gameMode).gdfix$setDestroyingItem(stack);
+        ((ItemInHandRendererAccessor) mc.getEntityRenderDispatcher().getItemInHandRenderer())
+                .gdfix$setMainHandItem(stack);
+        if (config.debug) {
+            LOGGER.info("[gdfix] break-reset synced held slot {} -> {}", slot, stack);
+        }
+    }
+
+    /** Gemstone Desync Fix — re-sync neighbouring pane shapes when a gemstone becomes air. */
+    public static void onServerVerifiedBlockUpdate(Level level, BlockPos pos, BlockState newState) {
+        if (config == null || !config.gemstoneDesyncFix || !newState.isAir()) {
+            return;
+        }
+        BlockState oldState = level.getBlockState(pos);
+        if (isStainedGlass(oldState)) {
+            // UPDATE_ALL == UPDATE_NEIGHBORS | UPDATE_CLIENTS == 3 (matches the reference impl).
+            newState.updateNeighbourShapes(level, pos, Block.UPDATE_ALL);
             if (config.debug) {
-                LOGGER.info("[gdfix] tracking gemstone break at {}", trackedPos);
+                LOGGER.info("[gdfix] gemstone desync re-sync of neighbours at {}", pos);
             }
         }
     }
 
-    private static void onEndTick(Minecraft mc) {
-        tickCounter++;
-        if (config == null || !config.gemstoneDesyncFix || !tracker.isTracking()) {
-            return;
-        }
-        if (mc.level == null || mc.getConnection() == null
-                || mc.gameMode == null || trackedPos == null) {
-            tracker.clear();
-            trackedPos = null;
-            return;
-        }
-        boolean stillGemstone = isGemstone(mc, trackedPos);
-        if (tracker.tick(tickCounter, stillGemstone)) {
-            resync(mc, trackedPos);
-        }
-        if (!tracker.isTracking()) {
-            trackedPos = null;
-        }
-    }
-
-    /**
-     * Re-drive the break on a reverted gemstone block. Using the game mode (rather than
-     * hand-crafted packets) keeps Minecraft's block-prediction sequence numbers correct,
-     * which is exactly what avoids introducing a fresh desync.
-     */
-    private static void resync(Minecraft mc, BlockPos pos) {
-        Direction face = faceToward(mc, pos);
-        mc.gameMode.startDestroyBlock(pos, face);
-        if (config.debug) {
-            LOGGER.info("[gdfix] re-syncing ghost gemstone block at {} (face {})", pos, face);
-        }
-    }
-
-    private static boolean isGemstone(Minecraft mc, BlockPos pos) {
-        String id = BuiltInRegistries.BLOCK.getKey(mc.level.getBlockState(pos).getBlock()).toString();
-        return GemstoneBlocks.isGemstoneBlockId(id);
-    }
-
-    private static Direction faceToward(Minecraft mc, BlockPos pos) {
-        HitResult hit = mc.hitResult;
-        if (hit instanceof BlockHitResult blockHit && blockHit.getBlockPos().equals(pos)) {
-            return blockHit.getDirection();
-        }
-        return Direction.UP;
-    }
-
-    private static String key(BlockPos p) {
-        return p.getX() + "," + p.getY() + "," + p.getZ();
+    private static boolean isStainedGlass(BlockState state) {
+        return state.getBlock() instanceof StainedGlassBlock
+                || state.getBlock() instanceof StainedGlassPaneBlock;
     }
 }

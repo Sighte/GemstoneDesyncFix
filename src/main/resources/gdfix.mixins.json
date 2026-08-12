@@ -3,7 +3,10 @@
 	"package": "com.gdfix.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"MultiPlayerGameModeMixin"
+		"ClientLevelMixin",
+		"ClientPacketListenerMixin",
+		"ItemInHandRendererAccessor",
+		"MultiPlayerGameModeAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

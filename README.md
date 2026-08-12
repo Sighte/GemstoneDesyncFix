@@ -3,17 +3,16 @@
 A small, **standalone Fabric mod for Minecraft 26.1.2** that provides two client-side
 gemstone-mining fixes and nothing else. Mod version **1.0.0**.
 
-> Clean-room reimplementation from the underlying client/server block mechanics.
-> Contains no third-party mod code.
-
 ## Features
 
 | Toggle | What it does |
 | --- | --- |
-| **Break Reset Fix** | After you break a block, vanilla forces a 5-tick `destroyDelay` before the next block can be mined. This rewrites that cooldown to `0` so mining continues immediately with no stall. |
-| **Gemstone Desync Fix** | When you break a gemstone (rendered as stained glass / panes) but the server reverts it back into place — a "ghost block" — the mod detects the block reappearing and re-drives the break through the vanilla game mode (which keeps Minecraft's packet-sequence numbers correct, so it resolves the desync instead of causing a new one). |
+| **Break Reset Fix** | While mining, the server frequently re-sends the held item (durability / Skyblock stat updates). Vanilla sees a "new" `ItemStack` and resets the mining swing and re-equip animation, stalling the mine. This writes the incoming stack straight into `MultiPlayerGameMode.destroyingItem` and `ItemInHandRenderer.mainHandItem` for the held hotbar slot, so mining continues uninterrupted. |
+| **Gemstone Desync Fix** | Gemstones render as stained-glass panes. When one is broken to air, neighbouring panes keep their stale connection states (their hitboxes still reach into the now-empty space), which can block your next hit. This calls `updateNeighbourShapes` on the air update so the neighbours re-sync their shapes immediately. |
 
-Both default to **on** and can be toggled independently.
+Both default to **on** and can be toggled independently. The mechanism mirrors the
+corresponding features in [nofrills](https://modrinth.com/mod/nofrills); this is a
+standalone re-implementation for Minecraft 26.1.2.
 
 ## Usage
 
@@ -40,17 +39,11 @@ Stored at `config/gdfix.json` (created on first launch):
 {
   "breakResetFix": true,
   "gemstoneDesyncFix": true,
-  "ghostThresholdTicks": 3,
-  "giveUpTicks": 12,
   "debug": false
 }
 ```
 
-- `ghostThresholdTicks` — ticks a reverted gemstone must persist before it counts as a ghost and a re-sync is sent.
-- `giveUpTicks` — ticks after a re-sync before giving up on a stubborn ghost so tracking can restart.
-- `debug` — logs tracking / re-sync activity to the client log.
-
-Config tuning values are read at startup; restart the client after editing the JSON by hand.
+- `debug` — logs fix activity to the client log.
 
 ## Requirements
 
@@ -87,9 +80,9 @@ Minecraft 26.1 ships **unobfuscated** (real Mojang names, with parameters), so:
 ## Verification status
 
 - ✅ Compiles against Minecraft 26.1.2 / Fabric (Java 25).
-- ✅ 12 unit tests pass for the pure logic (`DesyncTracker`, `GemstoneBlocks`).
-- ✅ Mixin targets verified against the decompiled 26.1.2 source
-  (`destroyBlock`, `continueDestroyBlock`, `destroyDelay`).
+- ✅ Unit tests pass for the pure slot logic (`HotbarSlots`).
+- ✅ All four mixin targets verified against the decompiled 26.1.2 source
+  (`ClientPacketListener.handleContainerSetSlot`, `ClientLevel.setServerVerifiedBlockState`,
+  `MultiPlayerGameMode.destroyingItem`, `ItemInHandRenderer.mainHandItem`).
 - ⚠️ In-game behaviour on Hypixel SkyBlock has **not** been tested from the build environment
-  (it requires connecting to the live server). The `ghostThresholdTicks` / `giveUpTicks`
-  values may want tuning against real server latency.
+  (it requires connecting to the live server).

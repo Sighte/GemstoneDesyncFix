@@ -17,19 +17,13 @@ public final class GdFixConfig {
     private static final Path PATH =
             FabricLoader.getInstance().getConfigDir().resolve("gdfix.json");
 
-    /** Zero the vanilla post-break cooldown so mining can continue immediately. */
+    /** Keep the mining/render item caches in sync with server slot updates. */
     public boolean breakResetFix = true;
 
-    /** Re-drive breaking on gemstone blocks the server reverts back into place. */
+    /** Re-sync neighbouring pane shapes when a gemstone (stained glass) becomes air. */
     public boolean gemstoneDesyncFix = true;
 
-    /** Ticks a reverted gemstone block must persist before it counts as a ghost. */
-    public int ghostThresholdTicks = 3;
-
-    /** Ticks after a re-sync before giving up on a stubborn ghost block. */
-    public int giveUpTicks = 12;
-
-    /** Log tracking / re-sync activity to the client log. */
+    /** Log fix activity to the client log. */
     public boolean debug = false;
 
     public static GdFixConfig load() {
@@ -37,7 +31,7 @@ public final class GdFixConfig {
             if (Files.exists(PATH)) {
                 GdFixConfig cfg = GSON.fromJson(Files.readString(PATH), GdFixConfig.class);
                 if (cfg != null) {
-                    return cfg.sanitised();
+                    return cfg;
                 }
             }
         } catch (Exception e) {
@@ -55,15 +49,5 @@ public final class GdFixConfig {
         } catch (IOException e) {
             GdFixClient.LOGGER.warn("[gdfix] Could not write {}", PATH, e);
         }
-    }
-
-    private GdFixConfig sanitised() {
-        if (ghostThresholdTicks < 1) {
-            ghostThresholdTicks = 1;
-        }
-        if (giveUpTicks < ghostThresholdTicks) {
-            giveUpTicks = ghostThresholdTicks * 4;
-        }
-        return this;
     }
 }
