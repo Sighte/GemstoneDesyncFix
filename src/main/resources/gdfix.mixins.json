@@ -5,6 +5,7 @@
 	"client": [
 		"ClientLevelMixin",
 		"ClientPacketListenerMixin",
+		"IronBarsBlockMixin",
 		"ItemInHandRendererAccessor",
 		"MultiPlayerGameModeAccessor"
 	],

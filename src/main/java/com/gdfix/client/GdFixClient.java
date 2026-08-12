@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.CrossCollisionBlock;
 import net.minecraft.world.level.block.StainedGlassBlock;
 import net.minecraft.world.level.block.StainedGlassPaneBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -86,5 +87,36 @@ public final class GdFixClient implements ClientModInitializer {
     private static boolean isStainedGlass(BlockState state) {
         return state.getBlock() instanceof StainedGlassBlock
                 || state.getBlock() instanceof StainedGlassPaneBlock;
+    }
+
+    /**
+     * Gemstone Desync Fix (pane shape). Called from {@code IronBarsBlockMixin} with the
+     * result of a pane shape update. An isolated gemstone pane (stained glass with no
+     * connections) is promoted to the full connected shape so it gets a full-size hitbox
+     * that is easy to aim at while mining.
+     */
+    public static BlockState fixDefaultGemstonePane(BlockState state) {
+        if (config != null && config.gemstoneDesyncFix && isDefaultPane(state)) {
+            return asFullPane(state);
+        }
+        return state;
+    }
+
+    private static boolean isDefaultPane(BlockState state) {
+        return isStainedGlass(state) && !isConnectedPane(state);
+    }
+
+    private static boolean isConnectedPane(BlockState state) {
+        return state.getValue(CrossCollisionBlock.NORTH)
+                || state.getValue(CrossCollisionBlock.EAST)
+                || state.getValue(CrossCollisionBlock.SOUTH)
+                || state.getValue(CrossCollisionBlock.WEST);
+    }
+
+    private static BlockState asFullPane(BlockState state) {
+        return state.setValue(CrossCollisionBlock.NORTH, true)
+                .setValue(CrossCollisionBlock.EAST, true)
+                .setValue(CrossCollisionBlock.SOUTH, true)
+                .setValue(CrossCollisionBlock.WEST, true);
     }
 }
